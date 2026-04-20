@@ -1,5 +1,5 @@
 {
-  "app": "npx ts-node --prefer-ts-exts bin/sentiment-algo-trader.ts",
+  "app": "npx ts-node --prefer-ts-exts infra/bin/sentiment-algo-trader.ts",
   "watch": {
     "include": [
       "**"
