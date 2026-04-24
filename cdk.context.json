@@ -1,0 +1,9 @@
+{
+  "availability-zones:account=156736821245:region=ap-southeast-2": [
+    "ap-southeast-2a",
+    "ap-southeast-2b",
+    "ap-southeast-2c"
+  ],
+  "ami:account=156736821245:filters.image-type.0=machine:filters.name.0=fck-nat-al2023-*-arm64-ebs:filters.state.0=available:owners.0=568608671756:region=ap-southeast-2": "ami-0137365df8c496ddb",
+  "ami:account=156736821245:filters.image-type.0=machine:filters.name.0=fck-nat-al2023-*-x86_64-ebs:filters.state.0=available:owners.0=568608671756:region=ap-southeast-2": "ami-032980b906c0ac63d"
+}

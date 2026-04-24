@@ -1,9 +1,14 @@
 #!/usr/bin/env node
+import 'dotenv/config';
 import * as cdk from 'aws-cdk-lib';
 import { SentimentAlgoTraderStack } from '../lib/sentiment-algo-trader-stack';
 
 const app = new cdk.App();
 new SentimentAlgoTraderStack(app, 'SentimentAlgoTraderStack', {
+  env: { 
+    account: process.env.CDK_DEFAULT_ACCOUNT || '156736821245', 
+    region: process.env.CDK_DEFAULT_REGION || 'ap-southeast-2' 
+  },
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */

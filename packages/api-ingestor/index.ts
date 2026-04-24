@@ -2,23 +2,29 @@ import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import axios from "axios";
 import { Article } from "./types";
 
-const sqs = new SQSClient({});
+// 1. Initialize the SQS Client
+// Tip: AWS SDK v3 automatically picks up credentials if running in Lambda
+const sqs = new SQSClient({ 
+  region: "ap-southeast-2", // Sydney
+});
 
 export const handler = async (event: any) => {
-  const API_KEY = process.env.ALPHA_VANTAGE_KEY;
+  const API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
   const QUEUE_URL = process.env.QUEUE_URL;
-  const url = `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=GOOGL&limit=5&apikey=${API_KEY}`;
 
   try {
-    const articles = await getNewsArticles(url);
-    
-    if (!articles || articles.length === 0) {
-      console.log("No new articles found.");
-      return { statusCode: 200, body: "No news to process." };
+    const url = `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=GOOG,NVDA&apikey=${API_KEY}`;
+    const response = await axios.get(url);
+
+    if (response.data.Information || response.data.Note) {
+       console.warn("Alpha Vantage Notice:", response.data.Information || response.data.Note);
+       return [];
     }
 
-    // Map each article to a promise for parallel execution
-    const pushPromises = articles.map((article: Article) => {
+    const articles = response.data.feed as Article[];
+    const uniqueArticles = Array.from(new Map(articles.map((a: Article) => [a.url, a])).values());
+
+    const pushPromises = uniqueArticles.map((article: Article) => {
       const messageParams = {
         QueueUrl: QUEUE_URL,
         MessageBody: JSON.stringify({
@@ -39,23 +45,6 @@ export const handler = async (event: any) => {
     return { statusCode: 200, body: `Successfully ingested ${articles.length} articles` };
   } catch (error) {
     console.error('Lambda Handler Error: ', error);
-    throw error;
-  }
-}
-
-const getNewsArticles = async (url: string) => {
-  try {
-    const response = await axios.get(url);
-    
-    // Check if Alpha Vantage returned an error message instead of data
-    if (response.data.Information || response.data.Note) {
-       console.warn("Alpha Vantage Notice:", response.data.Information || response.data.Note);
-       return [];
-    }
-
-    return response.data.feed || [];
-  } catch (error) {
-    console.error('API Fetch Error: ', error);
     throw error;
   }
 }
