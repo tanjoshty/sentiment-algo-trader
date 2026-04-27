@@ -1,0 +1,7 @@
+node_modules
+cdk.out
+.venv
+packages/ml-analyser/.venv
+**/.venv
+**/__pycache__
+**/*.pyc

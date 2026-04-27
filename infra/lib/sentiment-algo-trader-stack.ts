@@ -2,12 +2,15 @@ import 'dotenv/config';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as triggers from 'aws-cdk-lib/triggers';
 import { FckNatInstanceProvider } from 'cdk-fck-nat';
+import * as lambdaPython from '@aws-cdk/aws-lambda-python-alpha';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 
 export class SentimentAlgoTraderStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
@@ -64,12 +67,30 @@ export class SentimentAlgoTraderStack extends cdk.Stack {
       ec2.Port.allTraffic(),
       'Allow Lambda to send traffic through fck-nat'
     );
+    natGatewayProvider.role.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')
+    );
+    natGatewayProvider.role.addToPrincipalPolicy(new iam.PolicyStatement({
+      actions: ['ssm:StartSession'],
+      resources: ['*'],
+    }));
+    // Explicitly allow the NAT Security Group to send traffic to the DB
+    natGatewayProvider.securityGroup.addEgressRule(
+      dbSecurityGroup,
+      ec2.Port.tcp(5432),
+      'Allow NAT instance to send queries to RDS'
+    );
 
     // Allow Lambdas to talk to the DB
     dbSecurityGroup.addIngressRule(
       lambdaSecurityGroup,
       ec2.Port.tcp(5432),
       'Allow PostgreSQL access from Lambda'
+    );
+    dbSecurityGroup.addIngressRule(
+      natGatewayProvider.securityGroup, // Allow the NAT instance SG
+      ec2.Port.tcp(5432),
+      'Allow PostgreSQL access from NAT Instance (SSM Tunnel)'
     );
 
     // 3. RDS Instance (Standard RDS - Free Tier Eligible)
@@ -142,5 +163,40 @@ export class SentimentAlgoTraderStack extends cdk.Stack {
       invocationType: triggers.InvocationType.REQUEST_RESPONSE,
       timeout: cdk.Duration.minutes(2),
     });
+
+    const mlAnalyser = new lambdaPython.PythonFunction(this, 'MlAnalyser', {
+      entry: 'packages/ml-analyser', // Directory with your code and requirements.txt
+      runtime: lambda.Runtime.PYTHON_3_11,
+      index: 'handler.py',
+      handler: 'handler',
+      vpc: this.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [lambdaSecurityGroup],
+      timeout: cdk.Duration.minutes(5), // CRITICAL: DeepSeek-R1 reasoning takes time
+      memorySize: 512, // Pandas/OpenAI SDK can be memory hungry
+      environment: {
+        DB_HOST: this.database.dbInstanceEndpointAddress,
+        DB_USER: 'dbadmin', // Hardcoding user is fine, keeps it clear
+        DB_PASSWORD: this.database.secret!.secretValueFromJson('password').toString(), // Use .toString()
+        DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
+      },
+      bundling: {
+        assetExcludes: [
+          '**/.venv',
+          '**/__pycache__',
+          '**/.env',
+          '**/node_modules',
+        ]
+      }
+    })
+    this.database.secret?.grantRead(mlAnalyser);
+    mlAnalyser.addEnvironment('DB_PASSWORD', 
+      this.database.secret?.secretValueFromJson('password').unsafeUnwrap()!
+    );
+
+    mlAnalyser.addEventSource(new lambdaEventSources.SqsEventSource(newsQueue, {
+      batchSize: 5, // Process 5 articles at a time
+      maxBatchingWindow: cdk.Duration.seconds(30),
+    }));
   }
 }

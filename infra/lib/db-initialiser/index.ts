@@ -45,6 +45,13 @@ export const handler = async () => {
       CREATE INDEX IF NOT EXISTS idx_news_ticker ON news_sentiment(ticker);
     `);
 
+    await client.query(`
+      ALTER TABLE news_sentiment 
+      ADD COLUMN IF NOT EXISTS av_sentiment_score NUMERIC(4, 3),
+      ADD COLUMN IF NOT EXISTS llm_sentiment_score NUMERIC(4, 3),
+      ADD COLUMN IF NOT EXISTS llm_sentiment_label VARCHAR(20);
+    `);
+
     console.log("Schema initialization complete.");
   } catch (err) {
     console.error("Failed to initialize database:", err);

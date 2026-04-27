@@ -11,9 +11,10 @@ const sqs = new SQSClient({
 export const handler = async (event: any) => {
   const API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
   const QUEUE_URL = process.env.QUEUE_URL;
+  const ticker = 'GOOG';
 
   try {
-    const url = `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=GOOG,NVDA&apikey=${API_KEY}`;
+    const url = `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=${ticker}&limit=5&apikey=${API_KEY}`;
     const response = await axios.get(url);
 
     if (response.data.Information || response.data.Note) {
@@ -21,10 +22,15 @@ export const handler = async (event: any) => {
        return [];
     }
 
+    console.log("ticker: ", ticker);
+    console.log("url: ", url);
+    console.log("response: ", response.data.feed);
+
     const articles = response.data.feed as Article[];
     const uniqueArticles = Array.from(new Map(articles.map((a: Article) => [a.url, a])).values());
+    const topArticles = uniqueArticles.slice(0, 5);
 
-    const pushPromises = uniqueArticles.map((article: Article) => {
+    const pushPromises = topArticles.map((article: Article) => {
       const messageParams = {
         QueueUrl: QUEUE_URL,
         MessageBody: JSON.stringify({
@@ -32,7 +38,9 @@ export const handler = async (event: any) => {
           summary: article.summary,
           url: article.url,
           overall_sentiment_score: article.overall_sentiment_score,
-          overall_sentiment_label: article.overall_sentiment_label
+          overall_sentiment_label: article.overall_sentiment_label,
+          time_published: article.time_published,
+          ticker,
         }),
       };
       
@@ -42,7 +50,7 @@ export const handler = async (event: any) => {
 
     await Promise.all(pushPromises);
 
-    return { statusCode: 200, body: `Successfully ingested ${articles.length} articles` };
+    return { statusCode: 200, body: `Successfully ingested ${topArticles.length} articles` };
   } catch (error) {
     console.error('Lambda Handler Error: ', error);
     throw error;
