@@ -31,25 +31,42 @@ export const handler = async () => {
     console.log("Connected to RDS. Initializing Schema...");
 
     await client.query(`
-      CREATE TABLE IF NOT EXISTS news_sentiment (
+      -- Enable UUID extension if not present
+      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+      CREATE TABLE IF NOT EXISTS news_articles (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        article_url TEXT UNIQUE NOT NULL,
+        url TEXT UNIQUE NOT NULL, -- The gatekeeper for deduplication
         title TEXT NOT NULL,
         summary TEXT,
-        ticker VARCHAR(10) NOT NULL,
-        sentiment_score NUMERIC(4, 3),
-        sentiment_label VARCHAR(20),
-        published_at TIMESTAMPTZ,
+        published_at TIMESTAMPTZ, -- Use the actual news date for your 24h baseline
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_news_ticker ON news_sentiment(ticker);
-    `);
 
-    await client.query(`
-      ALTER TABLE news_sentiment 
-      ADD COLUMN IF NOT EXISTS av_sentiment_score NUMERIC(4, 3),
-      ADD COLUMN IF NOT EXISTS llm_sentiment_score NUMERIC(4, 3),
-      ADD COLUMN IF NOT EXISTS llm_sentiment_label VARCHAR(20);
+      CREATE TABLE IF NOT EXISTS ticker_sentiment (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        article_id UUID NOT NULL REFERENCES news_articles(id) ON DELETE CASCADE,
+        ticker VARCHAR(10) NOT NULL,
+        av_sentiment_score NUMERIC(5, 4), -- Higher precision for decimal math
+        llm_sentiment_score NUMERIC(5, 4),
+        relevance_score NUMERIC(5, 4),
+        timestamp TIMESTAMPTZ NOT NULL, -- Crucial for your hourly "Spike" queries
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS executed_trades (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        alpaca_order_id TEXT UNIQUE NOT NULL, -- Raw string from Alpaca API
+        ticker VARCHAR(10) NOT NULL,
+        avg_sentiment_1h NUMERIC(5, 4),
+        avg_sentiment_24h NUMERIC(5, 4),
+        qty INT NOT NULL CHECK (qty >= 1),
+        timestamp TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      -- Indexes for high-speed sentiment aggregation
+      CREATE INDEX IF NOT EXISTS idx_ticker_lookup ON ticker_sentiment(ticker);
+      CREATE INDEX IF NOT EXISTS idx_vibe_time ON ticker_sentiment(timestamp);
     `);
 
     console.log("Schema initialization complete.");
