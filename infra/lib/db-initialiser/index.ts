@@ -64,6 +64,16 @@ export const handler = async () => {
         timestamp TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS api_usage_log (
+        usage_date DATE PRIMARY KEY DEFAULT CURRENT_DATE,
+        call_count INT DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS ticker_status (
+        ticker VARCHAR(10) PRIMARY KEY,
+        last_polled_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
       -- Indexes for high-speed sentiment aggregation
       CREATE INDEX IF NOT EXISTS idx_ticker_lookup ON ticker_sentiment(ticker);
       CREATE INDEX IF NOT EXISTS idx_vibe_time ON ticker_sentiment(timestamp);

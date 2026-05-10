@@ -130,9 +130,17 @@ export class SentimentAlgoTraderStack extends cdk.Stack {
     this.apiIngestor = new NodejsFunction(this, 'IngestorHandler', {
       entry: 'packages/api-ingestor/index.ts',
       handler: 'handler',
+      vpc: this.vpc,
+      vpcSubnets: {
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+      },
+      securityGroups: [lambdaSecurityGroup], 
       environment: {
         QUEUE_URL: newsQueue.queueUrl, 
-        ALPHA_VANTAGE_KEY: process.env.ALPHA_VANTAGE_KEY || 'default_if_missing'
+        ALPHA_VANTAGE_KEY: process.env.ALPHA_VANTAGE_KEY || 'default_if_missing',
+        DB_HOST: this.database.dbInstanceEndpointAddress,
+        DB_NAME: 'tradingdb',
+        SECRET_ID: 'rds-credentials',
       },
     });
 
