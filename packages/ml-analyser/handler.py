@@ -10,7 +10,7 @@ def handler(event, context):
       conn = psycopg2.connect(
           host=os.environ.get("DB_HOST"),
           database="tradingdb",
-          user="dbadmin",
+          user=os.environ.get("DB_USER", "dbadmin"),
           password=os.environ.get("DB_PASSWORD"),
           connect_timeout=5
       )
@@ -44,17 +44,14 @@ def handler(event, context):
   return {"statusCode": 200, "body": json.dumps("Processing complete")}
 
 def execute_insert(cur, data):
-  # Fixed typo: 'article_url'
   query = """
-  INSERT INTO news_sentiment (
-      article_url, title, summary, ticker, sentiment_score, sentiment_label,
-      av_sentiment_score, llm_sentiment_score, llm_sentiment_label, published_at
-  ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-  ON CONFLICT (article_url) DO NOTHING;
+  INSERT INTO ticker_sentiment (
+      article_id, ticker, av_sentiment_score, llm_sentiment_score, relevance_score, timestamp
+  ) VALUES (%s, %s, %s, %s, %s, %s)
+  ON CONFLICT (article_id, ticker) DO NOTHING;
   """
   cur.execute(query, (
-      data['article_url'], data['title'], data['summary'], data['ticker'],
-      data['sentiment_score'], data['sentiment_label'],
-      data['av_sentiment_score'], data['llm_sentiment_score'], data['llm_sentiment_label'],
+      data['article_id'], data['ticker'],
+      data['av_sentiment_score'], data['llm_sentiment_score'], data['relevance_score'],
       data['published_at']
   ))

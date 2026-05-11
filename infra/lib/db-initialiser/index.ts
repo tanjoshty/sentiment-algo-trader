@@ -51,7 +51,8 @@ export const handler = async () => {
         llm_sentiment_score NUMERIC(5, 4),
         relevance_score NUMERIC(5, 4),
         timestamp TIMESTAMPTZ NOT NULL, -- Crucial for your hourly "Spike" queries
-        created_at TIMESTAMPTZ DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (article_id, ticker)
       );
 
       CREATE TABLE IF NOT EXISTS executed_trades (

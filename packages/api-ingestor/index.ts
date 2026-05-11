@@ -108,6 +108,7 @@ export const handler = async (event: any) => {
               summary: article.summary,
               ticker,
               av_score: article.overall_sentiment_score,
+              published_at: article.time_published,
             }),
           };
 

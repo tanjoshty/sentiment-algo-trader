@@ -1,34 +1,50 @@
-from sentiment_service import get_sentiment as analyse_sentiment_llm
+import os
+import json
+import re
+from openai import OpenAI
 
-def main(article_content):
-    # 1. Get the LLM's opinion
-    llm_result = analyse_sentiment_llm(article_content)
-    
-    # 2. Extract raw scores
-    av_score = float(article_content.get('overall_sentiment_score', 0))
-    llm_score = float(llm_result.get('score', 0)) if llm_result else 0
-    
-    # 3. Calculate the aggregated "Trading Score"
-    # Keeping your 40/60 split for the final decision-making score
-    final_score = (av_score * 0.4) + (llm_score * 0.6)
+client = OpenAI(
+    api_key=os.environ.get("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com"
+)
 
-    # 4. Return a flat object ready for DB insertion
-    return {
-        "article_url": article_content.get('url'),
-        "title": article_content.get('title'),
-        "summary": article_content.get('summary'),
-        "ticker": article_content.get('ticker'),
-        "sentiment_score": round(final_score, 4),      # The "Aggregated" score
-        "sentiment_label": get_label_from_score(final_score), # Helper below
-        "av_sentiment_score": av_score,                # Raw AlphaVantage
-        "llm_sentiment_score": llm_score,              # Raw DeepSeek
-        "llm_sentiment_label": llm_result.get('label') if llm_result else "Unknown",
-        "published_at": article_content.get('time_published')
-    }
+def main(article_data):
+    try:
+        # Switching to deepseek-reasoner (R1) as per sentiment_service.py style
+        response = client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a financial analyst. Analyse the sentiment of the article title and summary for the specific ticker provided. "
+                        "Ignore the sentiment score that is already there. "
+                        "Return ONLY a JSON object with 'sentiment_score' (a float) and 'relevance_score' (a float). "
+                        "Logic: x <= -0.35: Bearish; -0.35 < x <= -0.15: Somewhat-Bearish; "
+                        "-0.15 < x < 0.15: Neutral; 0.15 <= x < 0.35: Somewhat-Bullish; x >= 0.35: Bullish."
+                    )
+                },
+                {"role": "user", "content": json.dumps(article_data)},
+            ],
+            stream=False
+        )
 
-def get_label_from_score(score):
-    if score <= -0.35: return "Bearish"
-    if score <= -0.15: return "Somewhat-Bearish"
-    if score < 0.15: return "Neutral"
-    if score < 0.35: return "Somewhat-Bullish"
-    return "Bullish"
+        full_content = response.choices[0].message.content
+        
+        # Extract JSON block using regex as R1 includes reasoning tags that break standard JSON parsing
+        json_match = re.search(r'\{.*\}', full_content, re.DOTALL)
+        if not json_match:
+            return None
+        analysis = json.loads(json_match.group())
+        
+        return {
+            "article_id": article_data['article_id'],
+            "ticker": article_data['ticker'],
+            "av_sentiment_score": article_data['av_score'],
+            "llm_sentiment_score": analysis.get("sentiment_score", 0),
+            "relevance_score": analysis.get("relevance_score", 0),
+            "published_at": article_data['published_at']
+        }
+    except Exception as e:
+        print(f"DeepSeek API error: {str(e)}")
+        return None
