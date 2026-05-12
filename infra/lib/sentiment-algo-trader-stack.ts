@@ -185,7 +185,7 @@ export class SentimentAlgoTraderStack extends cdk.Stack {
       environment: {
         DB_HOST: this.database.dbInstanceEndpointAddress,
         DB_USER: 'dbadmin', // Hardcoding user is fine, keeps it clear
-        DB_PASSWORD: this.database.secret!.secretValueFromJson('password').toString(), // Use .toString()
+        SECRET_ID: this.database.secret!.secretArn,
         DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
       },
       bundling: {
@@ -198,9 +198,6 @@ export class SentimentAlgoTraderStack extends cdk.Stack {
       }
     })
     this.database.secret?.grantRead(mlAnalyser);
-    mlAnalyser.addEnvironment('DB_PASSWORD', 
-      this.database.secret?.secretValueFromJson('password').unsafeUnwrap()!
-    );
 
     mlAnalyser.addEventSource(new lambdaEventSources.SqsEventSource(newsQueue, {
       batchSize: 5, // Process 5 articles at a time

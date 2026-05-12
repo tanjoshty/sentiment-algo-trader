@@ -28,7 +28,8 @@ export const handler = async (event: any) => {
   const { username, password } = JSON.parse(secretResponse.SecretString);
 
   const client = new Client({
-    host: process.env.DB_HOST,
+    host: 'localhost',
+    // host: process.env.DB_HOST,
     user: username,
     password: password,
     database: process.env.DB_NAME,
@@ -75,10 +76,6 @@ export const handler = async (event: any) => {
        return [];
     }
 
-    console.log("ticker: ", ticker);
-    console.log("url: ", url);
-    console.log("response: ", response.data.feed);
-
     const articles = response.data.feed as Article[];
 
     await client.query(`
@@ -111,6 +108,8 @@ export const handler = async (event: any) => {
               published_at: article.time_published,
             }),
           };
+
+          console.log('messageParamss: ', messageParams);
 
           pushPromises.push(sqs.send(new SendMessageCommand(messageParams)));
         }

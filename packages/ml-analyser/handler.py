@@ -1,17 +1,34 @@
 import json
 import os
+import boto3
 import psycopg2
 from analyse_news_sentiment import main as analyse_sentiment
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def get_db_credentials():
+    secret_id = os.environ.get("SECRET_ID")
+    if not secret_id:
+        # Fallback for local testing
+        return "dbadmin", os.environ.get("DB_PASSWORD")
+    
+    client = boto3.client('secretsmanager')
+    response = client.get_secret_value(SecretId=secret_id)
+    creds = json.loads(response['SecretString'])
+    return creds['username'], creds['password']
 
 def handler(event, context):
   # Move connection outside the loop
   conn = None
   try:
+      username, password = get_db_credentials()
+      
       conn = psycopg2.connect(
-          host=os.environ.get("DB_HOST"),
-          database="tradingdb",
-          user=os.environ.get("DB_USER", "dbadmin"),
-          password=os.environ.get("DB_PASSWORD"),
+          host=os.environ.get("DB_HOST", "localhost"),
+          database=os.environ.get("DB_NAME", "tradingdb"),
+          user=username,
+          password=password,
           connect_timeout=5
       )
       cur = conn.cursor()
